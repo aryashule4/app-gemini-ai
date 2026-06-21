@@ -1,33 +1,45 @@
 import gradio as gr
-from google import generativeai as genai
+import requests
 import os
 
-# 1. Konfigurasi Kunci API Gemini Anda secara aman
-# Anda perlu memasukkan kuncinya di menu Settings -> Variables and secrets di Hugging Face nanti
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
+# Mengambil token Hugging Face secara otomatis yang tersimpan di dalam sistem Space
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
-# 2. Fungsi untuk memproses obrolan dengan AI
-def instruksi_ai(pesan, riwayat_obrolan):
-    if not GEMINI_API_KEY:
-        return "Error: Kunci API Gemini belum diatur di pengaturan Hugging Face Anda!"
+# Menggunakan model bahasa gratis yang andal dari Hugging Face (contoh: Llama 3)
+API_URL = "https://huggingface.co"
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+def tanya_ai(pesan, riwayat_obrolan):
+    # Menyusun format pesan agar dipahami oleh model AI
+    payload = {
+        "inputs": f"<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n{pesan}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+        "parameters": {"max_new_tokens": 512, "temperature": 0.7}
+    }
     
     try:
-        # Menggunakan model Gemini paling stabil saat ini
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        respons = model.generate_content(pesan)
-        return respons.text
+        respons = requests.post(API_URL, headers=headers, json=payload)
+        hasil = respons.json()
+        
+        # Mengambil teks jawaban dari respon API
+        if isinstance(hasil, list) and len(hasil) > 0:
+            teks_balasan = hasil[0].get("generated_text", "")
+            # Membersihkan instruksi sistem agar hanya menampilkan jawaban murni
+            if "assistant" in teks_balasan:
+                teks_balasan = teks_balasan.split("assistant")[-1].strip()
+            return teks_balasan
+        else:
+            return "Maaf, AI sedang sibuk memproses. Silakan coba sesaat lagi."
+            
     except Exception as e:
-        return f"Terjadi kesalahan saat memproses: {str(e)}"
+        return f"Terjadi kesalahan koneksi: {str(e)}"
 
-# 3. Membuat tampilan aplikasi Chatbot menggunakan Gradio
+# Membuat antarmuka Chatbot dengan Gradio
 demo = gr.ChatInterface(
-    fn=instruksi_ai, 
-    title="Asisten AI Saya 🤖",
-    description="Tanya apa saja kepada chatbot bertenaga Google Gemini ini.",
-    examples=["Halo, siapa kamu?", "Buatkan saya puisi pendek tentang teknologi", "Tips belajar coding lewat HP"]
+    fn=tanya_ai,
+    title="Asisten AI Hugging Face 🤖",
+    description="Chatbot ini berjalan 100% gratis menggunakan model open-source di Hugging Face Hub.",
+    examples=["Halo, apa kabar?", "Berikan saya resep nasi goreng sederhana", "Bagaimana cara kerja kecerdasan buatan?"]
 )
 
-# 4. Menjalankan aplikasi
 if __name__ == "__main__":
     demo.launch()
